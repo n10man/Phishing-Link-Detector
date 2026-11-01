@@ -2,27 +2,28 @@
 
 This project was built as a way for me to practise and apply what I've learnt in machine learning.
 
-Before this, I built CyberOne, an educational game that teaches people how to spot phishing emails. This time I went after phishing links. Both projects are about the same problem, phishing, from different sides. I built a model that reads a link and says whether it looks "safe" or "phishing". It only reads the text of the link and never opens it. This is a learning project. It isn't meant to be deployed or used as a real link checker.
+Before this, I built CyberOne, an educational game that teaches people how to spot phishing emails. This time I built a model that reads a link and says whether it looks "safe" or "phishing". It only reads the text of the link and never opens it, as this project is only meant for testing and educational purposes, and should never be used as a legitimate tool to check for links. 
 
-I also wanted to bring in the security side of what I've learnt. So I tried to break the model by editing links so they'd slip past it, and by poisoning its training data. Then I tested defences to see what actually held up.
+In addition, I also tried to break the model during the process by editing links so they'd slip past it, and by poisoning its training data. Then I tested defenses to see what actually held up.
 
 **Summary of findings:** the model catches about 87% of ordinary phishing links and wrongly flags about 3.5% of safe links. But if a few harmless words are added to a phishing link, it only catches between 57% and 63%, so it isn't hard to fool.
 
 ## How links are checked
 
-A model can't read text, so every link is first turned into numbers. The final model gets three kinds of numbers:
+The model could not read text, so every link is first turned into numbers. The final model gets three kinds of numbers:
 
-- **Link components:** lengths, dots, hyphens, digits, odd symbols, suspicious words like "login", and whether the website part of the link is a raw IP address. A raw IP address is a string of numbers instead of a name. A normal link looks like `examplebank.test/login`, while a raw IP link looks like `192.0.2.7/login`. Real sites almost always use a name, but a scammer can skip registering one by using the numbers.
+- **Link components:** lengths, dots, hyphens, digits, odd symbols, suspicious words like "login", and whether the website part of the link is a raw IP address. 
+A raw IP address is a string of numbers instead of a name. A normal link looks like `examplebank.test/login`, while a raw IP link looks like `192.0.2.7/login`. Real sites almost always use a name, but a scammer can skip registering one by using the numbers.
 - **1,000 yes/no flags for common 3-character pieces of the link,** like `.co` or `php`. Each flag says whether that piece appears in the link.
 - **500 more yes/no flags that look only at the website name.** The website name is the part before the first `/`, like `examplebank-login.test` in `examplebank-login.test/verify/account`. These flags work like the 1,000 above, but they ignore the rest of the link. That lets the model treat a suspicious word in the site's name differently from the same word further along the link.
 
-I tried three kinds of model on these numbers:
+During the building process, I also tried 3 different models:
 
 - **Logistic regression** gives every number a weight and adds them up. It's the simplest of the three.
 - **Random forest** builds lots of small decision trees and lets them vote.
 - **Gradient boosting** builds trees one after another, and each new tree tries to fix the mistakes of the ones before it.
 
-I compared them on the validation data. This is data I held back from training, so the models had never seen it, which makes it a fair way to compare them. I focused on three numbers:
+I compared them on the validation data, which was data I held back from training, so the models had never seen it, which makes it a fair way to compare them. The main focus was then on three specific numbers:
 
 - **Recall:** of all the real phishing links, the share the model catches.
 - **Precision:** of the links the model calls phishing, the share that really are.
@@ -40,9 +41,9 @@ I chose gradient boosting because it had the best recall, precision and F1. Its 
 
 ## The dataset
 
-I started with a Kaggle file of 549,346 labelled links. I removed 48,914 rows: 48,908 duplicates, and 6 rows that belonged to 2 links that appeared with both labels "safe" and "phishing". That left 500,432 entries: 78.5% safe and 21.5% phishing. I split them 70/15/15, so 70% for training, 15% for validation and 15% for testing. I kept the test set sealed until I had chosen a model.
+I started with a Kaggle file of 549,346 labelled links. I removed 48,914 rows; 48,908 of which were duplicates, and 6 rows that belonged to 2 links that appeared with both labels "safe" and "phishing". That left 500,432 entries; 78.5% safe and 21.5% phishing. I split them 70/15/15, so 70% for training, 15% for validation and 15% for testing. I kept the test set sealed until I had chosen a model.
 
-On the test set of this first version (v1), with the cut-off fixed at 0.5 before I opened it, the model caught 15,267 of 16,135 phishing links (recall 0.946) and wrongly flagged 2,076 of 58,930 safe ones. That looked great, but it turned out to be too good. More on that below. The final test later in this README uses a different split, so its numbers are different.
+On the test set of this first version (v1), with the cut-off fixed at 0.5 before I opened it, the model caught 15,267 of 16,135 phishing links (recall 0.946) and wrongly flagged 2,076 of 58,930 safe ones. The final test later in this README uses a different split, so its numbers are different.
 
 ## Attacking the model
 
@@ -58,7 +59,7 @@ The numbers in this section are for the first version (v1). The final model's nu
 
 The edited links still go to the same website. Adding harmless words to the path cut recall from 0.946 to 0.724, and adding them to the query cut it to 0.693. I also let a program try small edits at random and keep any edit that made the model less suspicious. It got past the model for 96.3% of 300 links, with about 3.5 edits on average.
 
-I retrained the model on edited examples in three rounds. Round 2 looked perfect (recall 0.999), but the result was misleading. I had edited only phishing links, so the model learned that "an added word means phishing", and it flagged 68% to 77% of edited safe links. Round 3 edited both kinds, and gave realistic results. Path-word recall went from 0.724 to 0.776, and query-word recall from 0.693 to 0.821. I tuned rounds 1 and 2 after I had already looked at the test set. I developed round 3 on validation data and ran it on the test set once.
+I retrained the model on edited examples in three rounds. Round 2 looked perfect (recall 0.999), but the results were misleading. I had edited only phishing links, so the model learned that "an added word means phishing", and it flagged 68% to 77% of edited safe links. Round 3 edited both kinds, and gave realistic results. Path-word recall went from 0.724 to 0.776, and query-word recall from 0.693 to 0.821. I tuned rounds 1 and 2 after I had already looked at the test set. I developed round 3 on validation data and ran it on the test set once.
 
 I also found that the model flagged 99.9% of plain domains like `google.com` as phishing. Almost every safe training link had a path, so "no path" looked like phishing.
 
@@ -89,8 +90,6 @@ flowchart LR
 
 ## What I kept and dropped
 
-I tested each idea against a rule I wrote down beforehand, so I couldn't bend the rule after seeing the result. The comparisons in this section use the validation data.
-
 ### Kept
 
 - **Removing email addresses from links.** About 0.4% of the training links had an email address in them, which is personal data. I swapped each one for a placeholder word before the model saw it. The results didn't change (recall 0.8570 to 0.8578), so I got the privacy for free.
@@ -103,10 +102,6 @@ I tested each idea against a rule I wrote down beforehand, so I couldn't bend th
 - **An odd-character check.** This counted tricks like hidden or foreign characters. They're too rare in this data to help.
 - **A "random-looking name" check.** This measured how random a site name looks. It didn't help enough.
 - **4-character pieces in place of 3-character pieces.** This made recall worse.
-
-### Passed my rules, but I didn't use it
-
-- **Adding 2,000 extra 4-character pieces** (I call this version 8b). It raised recall to 0.8752, but the model became easier to fool. Recall on links with harmless words added to the path fell from 0.59 to 0.50. My rules only checked normal recall and false alarms, so it passed. I noticed the gap afterwards and kept the simpler 4a.
 
 ## Breaking the model
 
@@ -178,12 +173,6 @@ The second model (8b) scored higher on clean test data (recall 0.884) and lower 
 - The "unsure" answer only recognises a plain site name written exactly, like `example.com`. The same name with `www.` in front is scored by the model and flagged as phishing. The locked set had `www.` and `http(s)://` removed, so its numbers don't cover that case.
 - Validation numbers are slightly optimistic, because I compared many models on the same data.
 - I didn't test stealing the model, or backdoors built from rare text pieces.
-
-## Choices I made after seeing results
-
-- I chose model 4a over 8b after seeing validation results. The gap in my rules is described above.
-- The v1 test set was reused in several early stages, so the v1 numbers are flattering.
-- The first launch of the final test script stopped at a bug before it read any data. I fixed it, then ran it once.
 
 ## Future iterations and improvements
 
