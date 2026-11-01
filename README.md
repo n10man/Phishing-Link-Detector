@@ -6,6 +6,7 @@ Before this, I built CyberOne, an educational game that teaches people how to sp
 
 I also wanted to bring in the security side of what I've learnt. So I tried to break the model by editing links so they'd slip past it, and by poisoning its training data. Then I tested defences to see what actually held up.
 
+**Summary of findings:** the model catches about 87% of ordinary phishing links and wrongly flags about 3.5% of safe links. But if a few harmless words are added to a phishing link, it only catches between 57% and 63%, so it isn't hard to fool.
 
 ## How links are checked
 
@@ -37,13 +38,13 @@ On the link components alone, all three models did badly. Adding the 1,000 text 
 
 I chose gradient boosting because it had the best recall, precision and F1. Its scores on the training and validation data were also close, which meant it wasn't just memorising the dataset. I judged the models by recall and precision, not accuracy. 78.5% of the links are safe, so a model that always says "safe" already scores 78.5% accuracy and catches nothing.
 
-## The dataset 
+## The dataset
 
-I started with a Kaggle file of 549,346 labelled links. I removed 48,914 duplicate or conflicting entries, which left 500,432 entries: 78.5% safe and 21.5% phishing. I split them 70/15/15, so 70% for training, 15% for validation and 15% for testing. I kept the test set sealed until I had chosen a model.
+I started with a Kaggle file of 549,346 labelled links. I removed 48,914 rows: 48,908 duplicates, and 6 rows that belonged to 2 links that appeared with both labels "safe" and "phishing". That left 500,432 entries: 78.5% safe and 21.5% phishing. I split them 70/15/15, so 70% for training, 15% for validation and 15% for testing. I kept the test set sealed until I had chosen a model.
 
 On the test set of this first version (v1), with the cut-off fixed at 0.5 before I opened it, the model caught 15,267 of 16,135 phishing links (recall 0.946) and wrongly flagged 2,076 of 58,930 safe ones. That looked great, but it turned out to be too good. More on that below. The final test later in this README uses a different split, so its numbers are different.
 
-## Attacking model
+## Attacking the model
 
 I made small, harmless-looking edits to phishing links. Here are two examples, using a made-up link:
 
@@ -103,6 +104,9 @@ I tested each idea against a rule I wrote down beforehand, so I couldn't bend th
 - **A "random-looking name" check.** This measured how random a site name looks. It didn't help enough.
 - **4-character pieces in place of 3-character pieces.** This made recall worse.
 
+### Passed my rules, but I didn't use it
+
+- **Adding 2,000 extra 4-character pieces** (I call this version 8b). It raised recall to 0.8752, but the model became easier to fool. Recall on links with harmless words added to the path fell from 0.59 to 0.50. My rules only checked normal recall and false alarms, so it passed. I noticed the gap afterwards and kept the simpler 4a.
 
 ## Breaking the model
 
@@ -160,36 +164,110 @@ On the locked set, the model caught 89.4% of phishing: 92.4% of the links from P
 
 The second model (8b) scored higher on clean test data (recall 0.884) and lower under the harmless-word edits.
 
+## Try it yourself (local demo)
+
+`demo/` holds a small page where you paste a link and get a verdict. It runs only on your own computer, never opens the link, and doesn't store or log what you paste. It needs the trained model, which isn't in this repo, so see "Reproducing it". It uses the version of the final system that can answer "unsure", which isn't the same setup as the main final test. The examples and their caveats are in [demo/README.md](demo/README.md).
+
+![The demo page answering "unsure" for a plain site name](docs/figures/gui_unsure.png)
+
 ## What this doesn't show
 
 - All the attacks were made for this project. They aren't taken from real attacks, and I didn't check that edited links still work as phishing pages.
 - The test split comes from the same Kaggle file as the training data. The data is probably old, but I don't know when it was collected.
 - The locked set can't test safe links that have a path.
+- The "unsure" answer only recognises a plain site name written exactly, like `example.com`. The same name with `www.` in front is scored by the model and flagged as phishing. The locked set had `www.` and `http(s)://` removed, so its numbers don't cover that case.
 - Validation numbers are slightly optimistic, because I compared many models on the same data.
 - I didn't test stealing the model, or backdoors built from rare text pieces.
+
+## Choices I made after seeing results
+
+- I chose model 4a over 8b after seeing validation results. The gap in my rules is described above.
+- The v1 test set was reused in several early stages, so the v1 numbers are flattering.
+- The first launch of the final test script stopped at a bug before it read any data. I fixed it, then ran it once.
 
 ## Future iterations and improvements
 
 - Newer and more varied data, and plain domains in realistic amounts.
-- A small web demo where you paste a link and get a verdict. It would never open the link, and it would say plainly that it's educational. A natural place to connect it to CyberOne.
+- Connecting the detector to CyberOne, for example by showing its verdict inside the game.
 
 ## What's in the repo
 
 - `notebooks/`: the code.
+- `demo/`: the local demo page.
 - `results/`: saved numbers, the full experiment log (`EXPERIMENTS.md`) and the final run (`final_v2/`).
 - `docs/`: a model card (which also says how AI tools were used in this project) and a threat model, with a source for every number, plus the figures used here.
+- `LICENSE` and `requirements.txt`.
 
-The data, the trained models and the virtual environment aren't in the repo.
+The data, the trained models and the virtual environment aren't in the repo. My own code is under the MIT licence.
 
 ## Reproducing it
 
-[YOU FILL THIS IN after the fresh-environment test: Python version, how to install from `requirements.txt`, where to download each dataset, and the order of scripts to run. State that the final test can't be repeated by design.]
+Tested on macOS with Python 3.14.5. Nothing else was tested.
+
+**1. Set up**
+
+```bash
+git clone https://github.com/n10man/Robust-phishing-detector.git
+cd Robust-phishing-detector
+python3.14 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+```
+
+In my test, making the environment took about 1 second and the install about 9 seconds.
+
+**2. Download the data (not in the repo)**
+
+Create a `data/` folder in the project, then save these two files in it. In my test I copied them from my own `data/` folder, so I did not test the download steps. If a downloaded file has a different name, rename it to match.
+
+| File | Where to get it | Save it as |
+|---|---|---|
+| Kaggle "Phishing Site URLs" | https://www.kaggle.com/datasets/taruntiwarihp/phishing-site-urls | `data/phishing_site_urls.csv` |
+| Tranco list, ID 262W9 | https://tranco-list.eu (look up list ID 262W9) | `data/tranco_262W9.csv` |
+
+**3. Run, in this order**
+
+```bash
+PYTHONHASHSEED=0 .venv/bin/python notebooks/stage1_clean.py       # cleans the raw file, 500,432 rows left (4 s)
+PYTHONHASHSEED=0 .venv/bin/python notebooks/split_by_domain.py    # splits 70/15/15 by website, checks no website is in two splits (4 s)
+PYTHONHASHSEED=0 .venv/bin/python notebooks/make_redacted_v2.py   # removes email-like parts from links (4 s)
+PYTHONHASHSEED=0 .venv/bin/python notebooks/train_chunk3.py --suffix exp4a --ngram-blocks url:3:1000,host:3:500   # trains model 4a (149 s)
+PYTHONHASHSEED=0 .venv/bin/python notebooks/evaluate.py --model models_v2/gradient_boosting_exp4a.joblib --recipe models_v2/feature_recipe_exp4a.joblib --val-file data_v2/val_redacted.csv --train-file data_v2/train_redacted.csv --out results/repro_exp4a   # validation report (25 s)
+```
+
+**4. What you should see**
+
+- The report says: recall 0.8617 at threshold 0.7399, target false-alarm rate 0.0365, precision 0.8660, F1 0.8639, 2,151 false alarms, AUC 0.9745.
+- The saved reference is 0.8617, so the difference is 0.
+- In my test, the retrained 4a model and recipe had exactly the same SHA-256 as the ones saved in `results/final_system_config.json`. That was on the same computer with the same package versions, so a different setup may give a different model.
+- The demo and the final-run script check that hash and refuse to run on a model that isn't identical. `demo/check_demo.py` tests the demo's refusal with a wrong hash in a temporary copy of the config. I did not retrain a different model to see it happen.
+- My report lacks the bare-domain tables and its Tranco counts differ, because I skipped the bare-domain files.
+
+**5. The demo**
+
+```bash
+PYTHONHASHSEED=0 .venv/bin/python demo/app.py
+```
+
+Open http://127.0.0.1:8000. In my test it started and printed "Listening on http://127.0.0.1:8000 (this computer only)". A request for the page returned HTTP 200. A made-up link scored 0.805 and the page answered "unsure", because that score is close to the alert level. I stopped the demo afterwards and the port was closed. `demo/check_demo.py` passed 63 of 63 checks.
+
+**6. What I did not reproduce**
+
+- The bare-domain files (`build_bare_sets.py` and the phishing-domains list).
+- The locked evaluation set.
+- Model 8b, and so `notebooks/check_final_eval.py`, which stops at the hash check with a missing file.
+- The poisoning, backdoor and transfer experiments.
+- The guard, rules and "unsure" experiments.
+
+**7. The final test**
+
+It cannot be repeated by design, because the locked set is not in the repo and `results/final_v2.lock` stops a rerun.
 
 ## Data and licences
 
 None of the data is in this repo. To reproduce the results you have to download it yourself from the sources below.
 
 - **Kaggle "Phishing Site URLs"** (Tarun Tiwari), https://www.kaggle.com/datasets/taruntiwarihp/phishing-site-urls. Used for training, validation and the test split. Licence: Database Contents License (DbCL) v1.0 (http://opendatacommons.org/licenses/dbcl/1.0/), which also requires following the Open Database License (ODbL). I don't know where the links originally came from or what period they cover. I don't redistribute the data.
-- **PhiUSIIL Phishing URL Dataset**, licensed CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/). Prasad, A. and Chandra, S., "PhiUSIIL: A diverse security profile empowered phishing URL detection framework based on similarity index and incremental learning", Computers & Security, 2023, https://doi.org/10.1016/j.cose.2023.103545. I used it for the locked evaluation set. I changed it: I removed duplicates and every website that also appears in the Kaggle data, kept at most 5 links per website, and stripped `http(s)://` and `www.`.
+- **PhiUSIIL Phishing URL Dataset**, licensed CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/). Prasad, A. and Chandra, S., "PhiUSIIL: A diverse security profile empowered phishing URL detection framework based on similarity index and incremental learning", Computers & Security, vol. 136, article 103545, January 2024, https://doi.org/10.1016/j.cose.2023.103545. I used it for the locked evaluation set. I changed it: I removed duplicates and every website that also appears in the Kaggle data, kept at most 5 links per website, and stripped `http(s)://` and `www.`.
 - **Phishing.Database** (https://github.com/Phishing-Database/Phishing.Database), MIT licence. I used its lists of active phishing links and phishing domains for the locked set and for the plain-domain experiment. It collects links from other sources, and I didn't check their terms.
 - **Tranco list**, list ID 262W9 (https://tranco-list.eu). Le Pochat, V., Van Goethem, T., Tajalizadehkhoob, S., Korczyński, M. and Joosen, W., "Tranco: A Research-Oriented Top Sites Ranking Hardened Against Manipulation", NDSS 2019. I used it for popular safe domains and for the brand list. The list combines rankings from several providers, each under its own licence, so I used it for non-commercial research only and didn't redistribute it.
